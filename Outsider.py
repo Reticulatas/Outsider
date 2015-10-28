@@ -44,7 +44,7 @@ def add_request():
         time.sleep(60*60)
         requests_made = 0
         print('...Resumed from sleep.')
-    if requests_made % 100:
+    if requests_made % 100 == 0:
         print('NOTICE: ' + str(requests_made) + ' requests made (limit ' + str(request_limit) + ')')
     return
 
