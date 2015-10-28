@@ -10,9 +10,11 @@ from datetime import datetime
 from datetime import date, timedelta
 
 #editable
-#dev_ser = '0760b4f313cc9064'    #device serial number
-dev_ser = 'HT478WS01096'    #device serial number
+#dev_ser = '0760b4f313cc9064'   #device serial number (Fuller's nexus)
+dev_ser = 'HT478WS01096'        #device serial number (SLG test phone)
 price_limit = 1.0               #max price per share to buy
+current_money = 1.0             #amount of money you have
+max_investment_per_comp = 1.0   #max money to spend on shares for any given company
 TESTMODE = True                 #does not buy/sell only report
 gather_time_ms = 10             #frequency of the gathering (milliseconds)
 sample_time_ms = 30*60*1000     #sample_time = max_samples * gather_time_in_s
@@ -40,6 +42,21 @@ class Company:
         plot_url = py.plot(data, filename=self.code)
         print plot_url
         return
+
+    def how_many_shares_to_buy(self, share_price):
+        # buy up to max price limit
+        buy_count = int((max_investment_per_comp - self.bought_value) / share_price)
+        total_cost = buy_count * share_price
+        # do not take more than you can afford
+        if total_cost >= current_money:
+            original_buy_count = buy_count
+            buy_count = int(current_money / share_price)
+            print 'WARNING: ('+self.code +') Cannot buy amount wanted (' + original_buy_count + ') because not enough money, getting (' + buy_count + ') instead!'
+        print '\t('+self.code +') Calculated buy amount: ' + buy_count + ' @ ' + share_price + '/share.  Total: ' + buy_count * share_price
+        return buy_count
+
+    def is_enough_data_to_trade(self):
+        return self.get_long_moving_avg() != 0
 
     def get_high(self):
         return max(self.prices)
@@ -107,6 +124,7 @@ class Company:
         self.prices.append(float(price))
         return
 
+    # returns the number to buy
     def check_buy(self):
         #one-time buy
         if self.owned_shares != 0:
@@ -116,11 +134,13 @@ class Company:
         avg200 = self.get_long_moving_avg()
         if avg50 > avg200:
             #trend change, buy
-            buy(self)
-            self.owned_shares = 1
-            self.bought_value = float(share.get_price())
-            return True
-        return False
+            buy_count = self.how_many_shares_to_buy(share.price)
+            if buy_count != 0:
+                if buy(self, buy_count) == True:
+                    self.owned_shares = buy_count
+                    self.bought_value = float(share.get_price() * self.owned_shares)
+            return self.owned_shares
+        return 0
 
     def check_sell(self):
         #UNCOMMENT WHEN USING ACTUAL DATA
@@ -134,7 +154,7 @@ class Company:
         avg200 = self.get_long_moving_avg()
         if avg50 < avg200:
             #trend change, buy
-            sell(self)
+            sell(self, self.owned_shares)
             return True
         return False
 
@@ -213,29 +233,44 @@ def determine_buy():
     return
 
 def return_menu():
-    for i in range(0,3):
-        device.press.back()
+    # for i in range(0,3):
+    device.click(40,40)
+    time.sleep(1)
+    device.click(40,40)
     return
 
-def buy(comp):
-    search(comp.code)
-    if not TESTMODE:
-        buy_button = device(text='Buy')
-        buy_button.click()
-    else:
-        print '[TEST MODE]'
-    print 'Bought ' + comp.code + ' for ' + Share(comp.code).get_price() + ' ratio: ' + str(comp.get_short_moving_avg() / comp.get_long_moving_avg())
+def buy(comp, num_to_buy):
+    if comp.is_enough_data_to_trade() == False:
+        print 'Purchase of ' + comp.code + ' skipped b/c not enough data to evaluate'
+        return
+    if search(comp.code) == True:
+        if not TESTMODE:
+            device(className='android.widget.ScrollView').scroll.to(textContains='BUY')
+            device(textContains='BUY').click()
+            time.sleep(1)
+            device(focused=True).set_text(str(num_to_buy))
+            device(resourceIdMatches ="com.robinhood.android:id/review_order_btn").click()
+            time.sleep(2)
+            #device.swipe(100,200,100,-100, steps=100)
+        else:
+            print '[TEST MODE]'
+        print 'Bought ' + comp.code + ' for ' + Share(comp.code).get_price() + ' ratio: ' + str(comp.get_short_moving_avg() / comp.get_long_moving_avg())
     return_menu()
     return
 
-def sell(comp):
-    search(comp.code)
-    if not TESTMODE:
-        sell_button = device(text='Sell')
-        sell_button.click()
-    else:
-        print '[TEST MODE]'
-    print 'Sold ' + comp.code + ' for ' + Share(comp.code).get_price()
+def sell(comp, num_to_sell):
+    if search(comp.code) == True:
+        if not TESTMODE:
+            device(className='android.widget.ScrollView').scroll.to(textContains='SELL')
+            device(textContains='SELL').click()
+            time.sleep(1)
+            device(focused=True).set_text(str(num_to_sell))
+            device(resourceIdMatches ="com.robinhood.android:id/review_order_btn").click()
+            time.sleep(2)
+            #device.swipe(100,200,100,-100, steps=100)
+        else:
+            print '[TEST MODE]'
+        print 'Sold ' + comp.code + ' for ' + Share(comp.code).get_price()
     return_menu()
     return
 
@@ -253,6 +288,8 @@ def connect():
 
 #do not call directly - use buy/sell
 def search(code):
+    # click randomly to gain focus
+    device.click(100,20)
     #search
     search_for = code.lower()
     search_button = device(descriptionContains = 'search')
@@ -282,7 +319,7 @@ print('Loading...')
 LoadPreBake('pennies.csv')
 print('...Done Loading')
 
-if True:
+if False:
     #store all stock prices
     print '---Outsider Ready---'
     while True:
