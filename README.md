@@ -9,6 +9,8 @@ See Requirements.txt for pip-installable dependencies.
 
     pip install -r requirements.txt
 
+You also need android sdk for adb and the appropriate drivers for your phone.  Phone must be in developer mode.
+
 ## Config.ini - Set Money Settings:
 
     {
