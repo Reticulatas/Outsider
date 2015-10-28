@@ -1,0 +1,4 @@
+yahoo_finance
+progressbar
+uiautomator
+plotly
