@@ -31,11 +31,11 @@ def format_date(year, month, day):
 
 class Company:
     def __init__(self, c, n):
-        self.code = c
-        self.name = n
-        self.prices = []
-        self.owned_shares = 0
-        self.bought_value = -1.0
+        self.code = c               # ticker
+        self.name = n               # friendly name
+        self.prices = []            # gather data
+        self.owned_shares = 0       # quantity of owned shares
+        self.bought_value = 0       # invested
 
     def log(self, msg):
         print('\t('+self.code+') '+msg)
@@ -128,40 +128,45 @@ class Company:
         return
     
     def gather(self):
-        share = Share(self.code)
-        price = share.get_price()
-        if price is None:
-            self.log('Company gave no price')
-            return
-        self.prices.append(float(price))
+        price = self.get_price()
+        if price is not None:
+            self.prices.append(price)
         return
 
+    def get_price(self):
+        share = Share(self.code)
+        try:
+            price_u = share.get_price()
+            if price_u is None:
+                self.log('Company gave no price')
+                return None
+            price = float(price_u)
+        except:
+            self.log('ERROR: Failed to retrieve price due to internal yahoo API error')
+            return None
+        return price
+    
     # returns the number to buy
     def check_buy(self):
         global current_money
         #one-time buy
         if self.owned_shares != 0:
             return False
-        share = Share(self.code)
         avg50 = self.get_short_moving_avg()
         avg200 = self.get_long_moving_avg()
         if avg50 == -1.0 or avg200 == -1.0:
             self.log('Short or Long moving average cannot be obtained due to yahoo API error')
             return 0
         
-        current_price_u = share.get_price()
-        if current_price_u is None:
-            self.log('Current Price is None for Stock')
-            return 0
+        current_price = self.get_price()
         
-        current_price = float(current_price_u)
         if avg50 > avg200:
             #trend change, buy
             buy_count = self.how_many_shares_to_buy(current_price)
             if buy_count != 0:
                 if buy(self, buy_count, current_price) == True:
                     self.owned_shares += buy_count
-                    self.bought_value = float(current_price * self.owned_shares)
+                    self.bought_value += float(current_price * self.owned_shares)
 
                     # reduce our money and re-save the config
                     current_money -= current_price * buy_count;
@@ -172,17 +177,11 @@ class Company:
 
     def check_sell(self):
         global money_gained_this_session
-        share = Share(self.code)
 
-        current_price_u = share.get_price()
-        if current_price_u is None:
-            self.log('Current Price is None for Stock')
-            return 0
-        
-        current_price = float(current_price_u)
+        current_price = self.get_price()
         
         #UNCOMMENT WHEN USING ACTUAL DATA
-        if self.bought_value < current_price:
+        if self.bought_value >= current_price * self.owned_shares:
             return False
 
         #UNCOMMENT WHEN USING ACTUAL DATA
@@ -195,8 +194,9 @@ class Company:
         if avg50 < avg200:
             #trend change, buy
             if sell(self, self.owned_shares,current_price) == True:
-                self.log('Pending execution order for: ' + self.bought_value)
-                money_gained_this_session += self.owned_shares * current_price
+                money_gained = self.owned_shares * current_price - self.bought_value
+                self.log('Pending execution order. Return: ' + str(money_gained))
+                money_gained_this_session += money_gained
                 print('--Money Gained This Session: ' + str(money_gained_this_session) + ' --')
                 self.owned_shares = 0
                 self.bought_value = 0
@@ -259,15 +259,17 @@ def LoadOwned(file_name='owned_stocks.ini'):
             return
         if '#' in line:
             continue
-        tokens = line.split(',', 1)
+        tokens = line.split(',', 2)
 
         code = tokens[0].strip()
-        shares = int(tokens[1])
+        shares = int(tokens[1].strip())
+        invested = float(tokens[2].strip())
         found = False
         for comp in companies:
             if comp.code == code:
                 print 'Loaded: ' + code + ' with ' + str(shares) + ' shares'
                 comp.owned_shares = shares
+                comp.bought_value = invested
                 found = True
 
         if found == False:
