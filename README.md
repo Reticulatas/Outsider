@@ -6,7 +6,8 @@ Robinhood automated trader
 ## Dependencies:
 
 See Requirements.txt for pip-installable dependencies.  
-pip install -r requirements.txt
+
+    pip install -r requirements.txt
 
 ## Config.ini - Set Money Settings:
 
