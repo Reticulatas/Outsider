@@ -18,7 +18,6 @@ price_limit = 1.0               #max price per share to buy
 current_money = 1.0             #amount of money you have
 max_investment_per_comp = 1.0   #max money to spend on shares for any given company
 TESTMODE = True                 #does not buy/sell only report
-money_gained_this_session = 0.0 #do not modify, money made this session
 gather_time_ms = 10             #frequency of the gathering (milliseconds)
 sample_time_ms = 30*60*1000     #sample_time = max_samples * gather_time_in_s
 graph_density = 100             #higher number is less dense
@@ -26,8 +25,28 @@ long_moving = 15                #moving avg (200)
 short_moving = 5                #moving avg (15)
 #####
 
+#do not edit
+money_gained_this_session = 0.0 #do not modify, money made this session
+requests_made = 0               # yahoo api limits requests to 2k /hour for public, 20k /hour for oAuth'ed
+request_limit = 2000            # yahoo api limit max
+stock_refresh_time = 2          # time in seconds from last access that a stock should be refreshed
+####
+
+
 def format_date(year, month, day):
     return str(year) + '-' + str(month) + '-' + str(day)
+
+def add_request():
+    global requests_made
+    requests_made += 1
+    if requests_made > request_limit:
+        print('Too many requests to yahoo api, sleeping for an hour...')
+        time.sleep(60*60)
+        requests_made = 0
+        print('...Resumed from sleep.')
+    if requests_made % 100:
+        print('NOTICE: ' + str(requests_made) + ' requests made (limit ' + str(request_limit) + ')')
+    return
 
 class Company:
     def __init__(self, c, n):
@@ -36,6 +55,17 @@ class Company:
         self.prices = []            # gather data
         self.owned_shares = 0       # quantity of owned shares
         self.bought_value = 0       # invested
+        self.share = Share(self.code) # share object
+        self.lastAccess = time.time()
+
+    # Every access to self.share must be prefixed with this call
+    def verify_share(self):
+        global requests_made
+        if time.time() - self.lastAccess > 2:
+            self.lastAccess = time.time()
+            self.share.refresh()
+            add_request()
+        return
 
     def log(self, msg):
         print('\t('+self.code+') '+msg)
@@ -70,22 +100,9 @@ class Company:
         return min(self.prices)
 
     def get_short_moving_avg(self):
-        now = datetime.now()
-        '''if TESTMODE:
-            e_date = format_date(now.year, now.month, now.day)
-            prevnow = now - timedelta(days=short_moving)
-            b_date = format_date(prevnow.year, prevnow.month, prevnow.day)
-            histories = Share(self.code).get_historical(b_date, e_date)
-            avg = 0
-            for hist in histories:
-                if not 'Close' in hist:
-                    print 'Warning: NO CLOSE DEFINED FOR: ' + self.code
-                    continue
-                avg += float(hist['Close'])
-            return avg / short_moving
-        else:'''
+        self.verify_share()
         try:
-            shortavg = Share(self.code).get_50day_moving_avg()
+            shortavg = self.share.get_50day_moving_avg()
         except:
             return -1.0
         if shortavg is None:
@@ -93,19 +110,9 @@ class Company:
         return float(shortavg)
 
     def get_long_moving_avg(self):
-        now = datetime.now()
-        ''' if TESTMODE:
-            e_date = format_date(now.year, now.month, now.day)
-            prevnow = now - timedelta(days=long_moving)
-            b_date = format_date(prevnow.year, prevnow.month, prevnow.day)
-            histories = Share(self.code).get_historical(b_date, e_date)
-            avg = 0
-            for hist in histories:
-                avg += float(hist['Close'])
-            return avg / long_moving
-        else:'''
+        self.verify_share()
         try:
-            longavg = Share(self.code).get_200day_moving_avg()
+            longavg = self.share.get_200day_moving_avg()
         except:
             return -1.0
         if longavg is None:
@@ -113,6 +120,7 @@ class Company:
         return float(longavg)
 
     def fill_historical(self):
+        self.verify_share()
         #probs doesn't work
         #map real time space
         day = str(int(datetime.now().second / 2))
@@ -124,7 +132,7 @@ class Company:
         s_date = '2014-' + month + '-' + day
         
         #for testing, get historical
-        histories = Share(self.code).get_historical(s_date, s_date)
+        histories = self.share.get_historical(s_date, s_date)
         return
     
     def gather(self):
@@ -134,13 +142,13 @@ class Company:
         return
 
     def get_price(self):
-        share = Share(self.code)
+        self.verify_share()
         try:
-            price_u = share.get_price()
-            if price_u is None:
-                self.log('Company gave no price')
-                return None
-            price = float(price_u)
+           price_u = self.share.get_price()
+           if price_u is None:
+               self.log('Company gave no price')
+               return None
+           price = float(price_u)
         except:
             self.log('ERROR: Failed to retrieve price due to internal yahoo API error')
             return None
@@ -159,6 +167,8 @@ class Company:
             return 0
         
         current_price = self.get_price()
+        if current_price is None:
+            return False;
         
         if avg50 > avg200:
             #trend change, buy
@@ -179,6 +189,8 @@ class Company:
         global money_gained_this_session
 
         current_price = self.get_price()
+        if current_price is None:
+            return False;
         
         #UNCOMMENT WHEN USING ACTUAL DATA
         if self.bought_value >= current_price * self.owned_shares:
