@@ -12,7 +12,7 @@ pip install -r requirements.txt
 
 *Config.ini*
 
-   {
+    {
         "current money": 0.12,
         "TEST MODE": true,
         "price limit": 1.0,
@@ -34,15 +34,22 @@ Figure out your serial # for your phone and set it in the script at:
 
 *Owned Stocks*
 
-If you'd like to append stocks you currently own, add them to owned_stocks.ini in the format CODE,# OF SHARES
+If you'd like to append stocks you currently own, add them to owned_stocks.ini in the format  
+
+*CODE,# OF SHARES*  
+
 One per line.
 
 *Saving after use*
 
-When running in shell, press Ctrl-C to stop execution when done. Then type:
-SaveConfig()
-*and*
-DumpOwned()
+When running in shell, press Ctrl-C to stop execution when done. Then type:  
+
+SaveConfig()  
+
+*and*  
+
+DumpOwned()  
+
 
 ## Adding Stocks
 
