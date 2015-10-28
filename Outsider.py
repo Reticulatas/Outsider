@@ -18,6 +18,7 @@ price_limit = 1.0               #max price per share to buy
 current_money = 1.0             #amount of money you have
 max_investment_per_comp = 1.0   #max money to spend on shares for any given company
 TESTMODE = True                 #does not buy/sell only report
+money_gained_this_session = 0.0 #do not modify, money made this session
 gather_time_ms = 10             #frequency of the gathering (milliseconds)
 sample_time_ms = 30*60*1000     #sample_time = max_samples * gather_time_in_s
 graph_density = 100             #higher number is less dense
@@ -137,6 +138,7 @@ class Company:
 
     # returns the number to buy
     def check_buy(self):
+        global current_money
         #one-time buy
         if self.owned_shares != 0:
             return False
@@ -158,16 +160,18 @@ class Company:
             buy_count = self.how_many_shares_to_buy(current_price)
             if buy_count != 0:
                 if buy(self, buy_count, current_price) == True:
-                    self.owned_shares = buy_count
+                    self.owned_shares += buy_count
                     self.bought_value = float(current_price * self.owned_shares)
+
+                    # reduce our money and re-save the config
+                    current_money -= current_price * buy_count;
+                    SaveConfig()
+                    
             return self.owned_shares
         return 0
 
     def check_sell(self):
-        #UNCOMMENT WHEN USING ACTUAL DATA
-        if self.owned_shares == 0:
-            return False
-        
+        global money_gained_this_session
         share = Share(self.code)
 
         current_price_u = share.get_price()
@@ -180,13 +184,23 @@ class Company:
         #UNCOMMENT WHEN USING ACTUAL DATA
         if self.bought_value < current_price:
             return False
+
+        #UNCOMMENT WHEN USING ACTUAL DATA
+        if self.owned_shares == 0:
+            self.log("Would have sold this stock, but none were owned")
+            return False
         
         avg50 = self.get_short_moving_avg()
         avg200 = self.get_long_moving_avg()
         if avg50 < avg200:
             #trend change, buy
-            sell(self, self.owned_shares,current_price)
-            return True
+            if sell(self, self.owned_shares,current_price) == True:
+                self.log('Pending execution order for: ' + self.bought_value)
+                money_gained_this_session += self.owned_shares * current_price
+                print('--Money Gained This Session: ' + str(money_gained_this_session) + ' --')
+                self.owned_shares = 0
+                self.bought_value = 0
+                return True
         return False
 
 #filtered by price limit
@@ -279,6 +293,7 @@ def DumpOwned(file_name='owned_stocks.ini'):
     return
 
 def LoadConfig(file_name='config.ini'):
+    global price_limit, current_money, max_investment_per_comp, TESTMODE
     if not os.path.isfile(file_name):
         SaveConfig(file_name)
     
@@ -294,9 +309,9 @@ def LoadConfig(file_name='config.ini'):
 
     print 'Config Loaded.'
     print '\tPrice Limit:\t ' + str(price_limit)
-    print '\tCurrent Money:\t ' + str(price_limit)
-    print '\tMax Investment Per Comp: ' + str(price_limit)
-    print '\tTest Mode:\t ' + str(price_limit)
+    print '\tCurrent Money:\t ' + str(current_money)
+    print '\tMax Investment Per Comp: ' + str(max_investment_per_comp)
+    print '\tTest Mode:\t ' + str(TESTMODE)
     return
 
 def SaveConfig(file_name='config.ini'):
@@ -333,7 +348,7 @@ def return_menu():
 def buy(comp, num_to_buy, price):
     if comp.is_enough_data_to_trade() == False:
         print 'Purchase of ' + comp.code + ' skipped b/c not enough data to evaluate'
-        return
+        return False
     if search(comp.code) == True:
         if not TESTMODE:
             device(className='android.widget.ScrollView').scroll.to(textContains='BUY')
@@ -348,8 +363,10 @@ def buy(comp, num_to_buy, price):
 
         # output result
         print 'Bought ' + str(num_to_buy) + 'x' + comp.code + ' for ' + str(price) + ' ratio: ' + str(comp.get_short_moving_avg() / comp.get_long_moving_avg()) + ' Total: ' + str(price * num_to_buy)
+        return_menu()
+        return True
     return_menu()
-    return
+    return False
 
 def sell(comp, num_to_sell, price):
     if search(comp.code) == True:
@@ -364,8 +381,10 @@ def sell(comp, num_to_sell, price):
         else:
             print '[TEST MODE]'
         print 'Sold ' + str(num_to_sell) + 'x' + comp.code + ' for ' + str(price * num_to_sell)
+        return_menu()
+        return True
     return_menu()
-    return
+    return False
 
 def connect():
     #connect
