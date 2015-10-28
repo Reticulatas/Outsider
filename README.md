@@ -8,9 +8,7 @@ Robinhood automated trader
 See Requirements.txt for pip-installable dependencies.
 pip install -r requirements.txt
 
-## Configs:
-
-*Config.ini*
+## Config.ini - Set Money Settings:
 
     {
         "current money": 0.12,
@@ -26,13 +24,13 @@ pip install -r requirements.txt
     max_investment_per_comp = 1.0   #max money to spend on shares for any given company
     TESTMODE = True                 #does not buy/sell only report
     
-*Device Settings*
+## Setup your Device
 
 Figure out your serial # for your phone and set it in the script at:
 
     dev_ser = 'HT473WS01096'        #device serial number
 
-*Owned Stocks*
+## Setup Owned Stocks (Optional)
 
 If you'd like to append stocks you currently own, add them to owned_stocks.ini in the format  
 
@@ -40,7 +38,7 @@ If you'd like to append stocks you currently own, add them to owned_stocks.ini i
 
 One per line.
 
-*Saving after use*
+## Saving after use
 
 When running in shell, press Ctrl-C to stop execution when done. Then type:  
 
